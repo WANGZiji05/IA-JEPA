@@ -1,0 +1,16 @@
+batch_size: 512
+accum_steps: 1
+num_frames: 16
+lr: 1.5e-4
+weight_decay: 0.05
+epochs: 100
+ema_momentum: 0.996
+mask_ratio: 0.6
+project_name: "Video-JEPA-CLEVRER"
+checkpoint_dir: "checkpoints"
+model_variant: "baseline"
+tensor_dir: "data/clevrer_tensors"
+mask_dir: null
+ann_dir: null
+frame_size: 96
+num_workers: 8

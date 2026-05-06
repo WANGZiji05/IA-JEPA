@@ -1,0 +1,16 @@
+model_variant: "object"
+batch_size: 512
+accum_steps: 1
+num_frames: 16
+lr: 1.5e-4
+weight_decay: 0.05
+epochs: 200
+ema_momentum: 0.996
+mask_ratio: 0.6
+project_name: "Video-JEPA-CLEVRER"
+checkpoint_dir: "checkpoints/object_variant"
+tensor_dir: "data/clevrer_tensors"
+mask_dir: "data/clevrer_data"
+ann_dir: "data/clevrer_data"
+frame_size: 96
+num_workers: 12
