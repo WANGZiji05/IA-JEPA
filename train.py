@@ -12,6 +12,7 @@ from src.data.clevrer_dataset import CLEVRERVideoDataset
 from src.models.jepa_baseline import VideoJEPA, update_target_encoder
 from src.models.jepa_object import ObjectMaskedJEPA
 from src.models.jepa_interaction import InteractionAwareJEPA
+from src.models.jepa_physics_aware import PhysicsAwareJEPA
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Video JEPA Variants")
@@ -77,6 +78,9 @@ def get_model(cfg, device):
     elif variant == "interaction":
         print("Using InteractionAwareJEPA (Variant B)")
         return InteractionAwareJEPA(**params).to(device)
+    elif variant == "physics_aware":
+        print("Using PhysicsAwareJEPA (PA-Masking, Pure SSL)")
+        return PhysicsAwareJEPA(**params).to(device)
     else:
         raise ValueError(f"Unknown model variant: {variant}")
 
@@ -95,7 +99,9 @@ def validate(model, dataloader, device, cfg):
             pred_latents, target_latents = model(video, masks=masks)
         elif cfg["model_variant"] == "interaction":
             pred_latents, target_latents = model(video, collision_frames=collisions)
-            
+        elif cfg["model_variant"] == "physics_aware":
+            pred_latents, target_latents = model(video)
+
         loss = F.mse_loss(pred_latents, target_latents)
         total_val_loss += loss.item()
         
@@ -218,11 +224,13 @@ def main():
                 pred_latents, target_latents = model(video, masks=masks)
             elif cfg["model_variant"] == "interaction":
                 pred_latents, target_latents = model(video, collision_frames=collisions)
-            
+            elif cfg["model_variant"] == "physics_aware":
+                pred_latents, target_latents = model(video)
+
             loss = F.mse_loss(pred_latents, target_latents)
             loss = loss / cfg["accum_steps"]
             loss.backward()
-            
+
             if (batch_idx + 1) % cfg["accum_steps"] == 0:
                 optimizer.step()
                 optimizer.zero_grad()

@@ -6,6 +6,7 @@ from src.eval.qa_probe import train_probe, evaluate_probe, MultimodalChoiceProbe
 from src.models.jepa_baseline import VideoJEPA
 from src.models.jepa_object import ObjectMaskedJEPA
 from src.models.jepa_interaction import InteractionAwareJEPA
+from src.models.jepa_physics_aware import PhysicsAwareJEPA
 import argparse
 import os
 
@@ -90,6 +91,7 @@ def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, nu
         if variant == 'baseline': model = VideoJEPA(**params)
         elif variant == 'object': model = ObjectMaskedJEPA(**params)
         elif variant == 'interaction': model = InteractionAwareJEPA(**params)
+        elif variant == 'physics_aware': model = PhysicsAwareJEPA(**params)
         else: raise ValueError(f"Unknown variant: {variant}")
         
         if os.path.exists(checkpoint_path):
