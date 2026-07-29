@@ -18,6 +18,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train Video JEPA Variants")
     parser.add_argument("--config", type=str, default="configs/default.yaml", help="Path to YAML config")
     parser.add_argument("--resume", action="store_true", help="Resume from last checkpoint")
+    parser.add_argument("--batch-size", type=int, default=None, help="Override batch size")
+    parser.add_argument("--accum-steps", type=int, default=None, help="Override gradient accumulation steps")
     return parser.parse_args()
 
 def save_checkpoint(state, checkpoint_dir, variant="model", epoch=None):
@@ -111,6 +113,11 @@ def validate(model, dataloader, device, cfg):
 def main():
     args = parse_args()
     cfg = load_config(args.config)
+    # Command-line overrides
+    if args.batch_size is not None:
+        cfg["batch_size"] = args.batch_size
+    if args.accum_steps is not None:
+        cfg["accum_steps"] = args.accum_steps
     
     variant = cfg.get("model_variant", "baseline")
     if os.path.exists("/content/drive"):
