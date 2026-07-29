@@ -277,6 +277,7 @@ def main():
             history["train_loss"].append(avg_train_loss)
             history["val_loss"].append(avg_val_loss)
             history["epochs"].append(epoch + 1)
+            os.makedirs(cfg["checkpoint_dir"], exist_ok=True)
             with open(os.path.join(cfg["checkpoint_dir"], "history.json"), "w") as f:
                 json.dump(history, f)
 
