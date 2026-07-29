@@ -9,8 +9,8 @@ ema_momentum: 0.996
 mask_ratio: 0.6
 project_name: "Video-JEPA-CLEVRER"
 checkpoint_dir: "checkpoints/object_variant"
-tensor_dir: "data/clevrer_tensors"
-mask_dir: "data/clevrer_data"
-ann_dir: "data/clevrer_data"
+tensor_dir: "/research/d7/spc/yrwang5/JEPA_experiements/data/clevrer/tensors"
+mask_dir: "/research/d7/spc/yrwang5/JEPA_experiements/data/clevrer/proposals"
+ann_dir: "/research/d7/spc/yrwang5/JEPA_experiements/data/clevrer/processed_proposals"
 frame_size: 96
 num_workers: 12

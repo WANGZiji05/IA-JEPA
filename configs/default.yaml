@@ -9,7 +9,7 @@ mask_ratio: 0.6
 project_name: "Video-JEPA-CLEVRER"
 checkpoint_dir: "checkpoints"
 model_variant: "baseline"
-tensor_dir: "data/clevrer_tensors"
+tensor_dir: "/research/d7/spc/yrwang5/JEPA_experiements/data/clevrer/tensors"
 mask_dir: null
 ann_dir: null
 frame_size: 96

@@ -50,7 +50,8 @@ def load_config(path):
         "project_name": "Video-JEPA-CLEVRER",
         "checkpoint_dir": "checkpoints",
         "model_variant": "baseline",
-        "val_interval": 1 # Validate every N epochs
+        "val_interval": 1,          # Validate every N epochs
+        "save_interval_steps": 500  # Save checkpoint every N global steps (for GPU time limits)
     }
     try:
         with open(path, 'r') as f:
@@ -242,7 +243,19 @@ def main():
                     "train/step": global_step
                 })
                 global_step += 1
-            
+
+                # Step-based checkpoint (for GPU time limits)
+                save_every = cfg.get("save_interval_steps", 500)
+                if global_step % save_every == 0:
+                    save_checkpoint({
+                        'epoch': epoch + 1,
+                        'state_dict': model.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'global_step': global_step,
+                        'config': cfg
+                    }, cfg["checkpoint_dir"], variant=variant)
+                    print(f"=> Step {global_step} checkpoint saved")
+
             epoch_train_loss += loss.item() * cfg["accum_steps"]
             progress_bar.set_postfix({'loss': loss.item() * cfg["accum_steps"]})
             

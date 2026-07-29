@@ -37,7 +37,10 @@ class CLEVRERVideoDataset(Dataset):
     def _get_masks(self, video_idx, frame_indices):
         if self.mask_dir is None or mask_utils is None:
             return None
-        mask_path = os.path.join(self.mask_dir, f"proposal_{video_idx:05d}.json")
+        # Try actual naming (sim_XXXXX.json) first, fall back to original (proposal_XXXXX.json)
+        mask_path = os.path.join(self.mask_dir, self.split, f"sim_{video_idx:05d}.json")
+        if not os.path.exists(mask_path):
+            mask_path = os.path.join(self.mask_dir, f"proposal_{video_idx:05d}.json")
         if not os.path.exists(mask_path):
             return None
         with open(mask_path, 'r') as f:
@@ -65,16 +68,34 @@ class CLEVRERVideoDataset(Dataset):
     def _get_collisions(self, video_idx):
         if self.ann_dir is None:
             return None
-        chunk_start = (video_idx // 1000) * 1000
-        chunk_dir = os.path.join(self.ann_dir, f"annotation_{chunk_start:05d}-{chunk_start+1000:05d}")
-        ann_path = os.path.join(chunk_dir, f"annotation_{video_idx:05d}.json")
-        
+        # Actual data: processed_proposals/sim_XXXXX.json
+        # Structure: {"ground_truth": {"collisions": [{"frame": 20}, ...]}}
+        # IA-JEPA original expected: annotation_XXXXX-XXXXX/annotation_XXXXX.json
+        # with {"collision": [{"frame_id": 20}, ...]}
+        ann_path = os.path.join(self.ann_dir, f"sim_{video_idx:05d}.json")
+        if not os.path.exists(ann_path):
+            # fall back to original IA-JEPA naming
+            chunk_start = (video_idx // 1000) * 1000
+            chunk_dir = os.path.join(self.ann_dir, f"annotation_{chunk_start:05d}-{chunk_start+1000:05d}")
+            ann_path = os.path.join(chunk_dir, f"annotation_{video_idx:05d}.json")
         if not os.path.exists(ann_path):
             return None
         with open(ann_path, 'r') as f:
             data = json.load(f)
-        
-        collision_frames = [c['frame_id'] for c in data.get('collision', [])]
+
+        # Try actual field name ('frame') first, then original ('frame_id')
+        # Handle both data formats: {"collision": [...]} or {"ground_truth": {"collisions": [...]}}
+        if 'collision' in data:
+            collisions_raw = data['collision']
+        elif 'ground_truth' in data:
+            collisions_raw = data['ground_truth'].get('collisions', [])
+        else:
+            collisions_raw = []
+        collision_frames = []
+        for c in (collisions_raw or []):
+            cf = c.get('frame', c.get('frame_id', None))
+            if cf is not None:
+                collision_frames.append(cf)
         if not collision_frames:
             return torch.tensor([], dtype=torch.long)
         return torch.tensor(collision_frames, dtype=torch.long)
