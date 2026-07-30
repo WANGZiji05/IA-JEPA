@@ -75,14 +75,19 @@ class VideoJEPA(nn.Module):
         self.predictor = LightweightViT(embed_dim, pred_depth, num_heads)
 
     def generate_mask(self, B, N, device):
-        """ Generates random masks. Returns indices to keep and indices to mask. """
+        """ Generates random masks. Returns indices to keep and indices to mask.
+
+        mask_ratio = fraction of patches kept VISIBLE (matching Object/Interaction convention).
+        Target (to-predict) = 1 - mask_ratio of patches.
+        Paper: "target masking ratio to 40%" → mask_ratio = 0.6 → 60% visible, 40% target.
+        """
         noise = torch.rand(B, N, device=device)
         ids_shuffle = torch.argsort(noise, dim=1)
-        
-        len_keep = int(N * (1 - self.mask_ratio))
+
+        len_keep = int(N * self.mask_ratio)       # 60% visible (context)
         ids_keep = ids_shuffle[:, :len_keep]
-        ids_mask = ids_shuffle[:, len_keep:]
-        
+        ids_mask = ids_shuffle[:, len_keep:]       # 40% to predict (target)
+
         return ids_keep, ids_mask
 
     def forward(self, x):

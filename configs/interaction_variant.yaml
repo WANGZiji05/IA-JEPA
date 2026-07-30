@@ -4,7 +4,7 @@ accum_steps: 1
 num_frames: 16
 lr: 1.5e-4
 weight_decay: 0.05
-epochs: 300
+epochs: 100
 ema_momentum: 0.996
 mask_ratio: 0.6
 project_name: "Video-JEPA-CLEVRER"
