@@ -28,6 +28,16 @@ class CLEVRERQADataset(Dataset):
         # Load QA data: prefer HuggingFace, fall back to local metadata
         self.qa_data = self._load_qa_data()
 
+        self.resize = T.Resize((frame_size, frame_size), antialias=True)
+        self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+        self.answer_to_idx = {
+            'cube': 0, 'cylinder': 1, 'sphere': 2,
+            'gray': 3, 'red': 4, 'blue': 5, 'green': 6, 'brown': 7, 'purple': 8, 'cyan': 9, 'yellow': 10,
+            'metal': 11, 'rubber': 12, 'yes': 13, 'no': 14
+        }
+        for i in range(11): self.answer_to_idx[str(i)] = 15 + i
+
     def _load_qa_data(self):
         """Load QA data from HuggingFace or local metadata files."""
         # Try HuggingFace first
@@ -77,16 +87,6 @@ class CLEVRERQADataset(Dataset):
 
         print(f"  Loaded {len(converted)} questions for {self.task_type}/{self.split}")
         return converted
-            
-        self.resize = T.Resize((frame_size, frame_size), antialias=True)
-        self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-        self.answer_to_idx = {
-            'cube': 0, 'cylinder': 1, 'sphere': 2,
-            'gray': 3, 'red': 4, 'blue': 5, 'green': 6, 'brown': 7, 'purple': 8, 'cyan': 9, 'yellow': 10,
-            'metal': 11, 'rubber': 12, 'yes': 13, 'no': 14
-        }
-        for i in range(11): self.answer_to_idx[str(i)] = 15 + i
 
     def __len__(self): return len(self.qa_data)
 
