@@ -1,28 +1,82 @@
 import torch
 from torch.utils.data import Dataset, ConcatDataset
-from datasets import load_dataset
 import torchvision.transforms as T
 import re
 import os
+import json
 
 class CLEVRERQADataset(Dataset):
     """
     Standardized Dataset for all CLEVRER tasks.
     Always returns: (video, label, task_type, video_idx, question_text, choices_text)
     """
-    def __init__(self, split='train', num_frames=16, frame_size=112, task_type='descriptive', tensor_dir='data/clevrer_tensors'):
+    def __init__(self, split='train', num_frames=16, frame_size=112, task_type='descriptive',
+                 tensor_dir='data/clevrer_tensors', metadata_dir=None):
         super().__init__()
         self.task_type = task_type
         self.split = split
-        self.qa_data = load_dataset('zechen-nlp/clevrer', task_type, split=split)
+        self.metadata_dir = metadata_dir
         self.num_frames = num_frames
         self.frame_size = frame_size
-        
+
         if tensor_dir == 'data/clevrer_tensors':
             if split == 'validation': self.tensor_dir = 'data/clevrer_tensors_val'
             elif split == 'test': self.tensor_dir = 'data/clevrer_tensors_test'
             else: self.tensor_dir = tensor_dir
         else: self.tensor_dir = tensor_dir
+
+        # Load QA data: prefer HuggingFace, fall back to local metadata
+        self.qa_data = self._load_qa_data()
+
+    def _load_qa_data(self):
+        """Load QA data from HuggingFace or local metadata files."""
+        # Try HuggingFace first
+        try:
+            from datasets import load_dataset
+            return load_dataset('zechen-nlp/clevrer', self.task_type, split=self.split)
+        except Exception as e:
+            print(f"  HuggingFace unavailable ({e}), trying local metadata...")
+
+        # Fall back to local metadata
+        if self.metadata_dir is None:
+            raise RuntimeError(
+                "Cannot load QA data. Provide --metadata_dir or ensure HuggingFace access."
+            )
+
+        split_map = {'train': 'train', 'validation': 'test', 'test': 'test'}
+        meta_split = split_map[self.split]
+        meta_path = os.path.join(self.metadata_dir, f'{meta_split}.json')
+        print(f"  Loading local metadata: {meta_path}")
+
+        with open(meta_path, 'r') as f:
+            raw = json.load(f)
+
+        # Flatten & convert to HF-compatible format
+        converted = []
+        for video_entry in raw:
+            video_file = video_entry['video_filename']
+            for q in video_entry.get('questions', []):
+                if q.get('question_type') != self.task_type:
+                    continue
+                item = {'video': video_file}  # HF format expects 'video'
+
+                if self.task_type == 'descriptive':
+                    # HF format: {'conversations': {'value': [question, answer]}}
+                    item['conversations'] = {
+                        'value': [q['question'], q.get('answer', '')]
+                    }
+                else:
+                    # HF format: {'question': ..., 'choices': {'choice': [...], 'answer': [...]}}
+                    item['question'] = q['question']
+                    choices_raw = q.get('choices', [])
+                    item['choices'] = {
+                        'choice': [c['choice'] for c in choices_raw],
+                        'answer': [c['answer'] for c in choices_raw],
+                    }
+                converted.append(item)
+
+        print(f"  Loaded {len(converted)} questions for {self.task_type}/{self.split}")
+        return converted
             
         self.resize = T.Resize((frame_size, frame_size), antialias=True)
         self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -76,7 +130,8 @@ class CLEVRERQADataset(Dataset):
 
         return clip_final, label, self.task_type, video_idx, question_str, choices_text
 
-def get_clevrer_qa_loaders(split='train', batch_size=32, num_frames=16, frame_size=112):
+def get_clevrer_qa_loaders(split='train', batch_size=32, num_frames=16, frame_size=112, metadata_dir=None):
     tasks = ['descriptive', 'explanatory', 'predictive', 'counterfactual']
-    datasets = [CLEVRERQADataset(split=split, num_frames=num_frames, frame_size=frame_size, task_type=t) for t in tasks]
+    datasets = [CLEVRERQADataset(split=split, num_frames=num_frames, frame_size=frame_size,
+                                  task_type=t, metadata_dir=metadata_dir) for t in tasks]
     return ConcatDataset(datasets)

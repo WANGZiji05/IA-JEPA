@@ -58,7 +58,7 @@ class ConsolidatedFeatureDataset(torch.utils.data.Dataset):
         features = self.features[local_idx]
         return features, item[1], item[2], item[3], item[4], item[5]
 
-def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, num_frames=16, quick=False, batch_size=32, suffix='', feature_dir=None):
+def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, num_frames=16, quick=False, batch_size=32, suffix='', feature_dir=None, metadata_dir=None, tensor_dir=None):
     print(f"Starting evaluation for {variant} using checkpoint {checkpoint_path}")
     final_metrics = None
     if feature_dir:
@@ -66,8 +66,8 @@ def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, nu
         val_consolidated = os.path.join(feature_dir, f"{variant}_val_consolidated.pth")
         if os.path.exists(train_consolidated) and os.path.exists(val_consolidated):
             print(f"=> Using CONSOLIDATED master tensors from {feature_dir}")
-            train_ds_qa = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size)
-            val_ds_qa = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size)
+            train_ds_qa = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
+            val_ds_qa = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
             train_ds = ConsolidatedFeatureDataset(train_consolidated, train_ds_qa)
             val_ds = ConsolidatedFeatureDataset(val_consolidated, val_ds_qa)
             train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=custom_collate_features)
@@ -77,8 +77,8 @@ def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, nu
             final_metrics = evaluate_probe_on_features(probe, val_loader, device)
         elif os.path.exists(feature_dir):
             print(f"=> Using PRE-EXTRACTED features from {feature_dir}")
-            train_ds_qa = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size)
-            val_ds_qa = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size)
+            train_ds_qa = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
+            val_ds_qa = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
             train_ds = FeatureDataset(feature_dir, train_ds_qa)
             val_ds = FeatureDataset(feature_dir.replace('train', 'val'), val_ds_qa)
             train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=custom_collate_features)
@@ -100,8 +100,13 @@ def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, nu
             model.load_state_dict(state_dict, strict=False)
             
         model.to(device); model.eval()
-        train_ds = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size)
-        val_ds = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size)
+        train_ds = get_clevrer_qa_loaders(split='train', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
+        val_ds = get_clevrer_qa_loaders(split='validation', num_frames=num_frames, frame_size=img_size, metadata_dir=metadata_dir)
+        if tensor_dir is not None:
+            for ds in train_ds.datasets:
+                ds.tensor_dir = tensor_dir
+            for ds in val_ds.datasets:
+                ds.tensor_dir = tensor_dir + '_val'
         
         # Video path MUST use num_workers=0 to prevent OOM
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=custom_collate)
@@ -124,6 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--suffix", type=str, default="")
     parser.add_argument("--feature_dir", type=str, default=None)
+    parser.add_argument("--metadata_dir", type=str, default=None, help="Path to CLEVRER metadata (train.json, test.json)")
+    parser.add_argument("--tensor_dir", type=str, default=None, help="Path to preprocessed .pth video tensors")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
-    evaluate(args.checkpoint, args.variant, args.device, args.img_size, args.num_frames, False, args.batch_size, args.suffix, args.feature_dir)
+    evaluate(args.checkpoint, args.variant, args.device, args.img_size, args.num_frames, False, args.batch_size, args.suffix, args.feature_dir, args.metadata_dir, args.tensor_dir)
