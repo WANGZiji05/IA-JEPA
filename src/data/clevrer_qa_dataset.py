@@ -37,19 +37,21 @@ class CLEVRERQADataset(Dataset):
         except Exception as e:
             print(f"  HuggingFace unavailable ({e}), trying local metadata...")
 
-        # Fall back to local metadata
+        # Use train.json, split internally: 0-7999 → train, 8000-9999 → val
         if self.metadata_dir is None:
             raise RuntimeError(
                 "Cannot load QA data. Provide --metadata_dir or ensure HuggingFace access."
             )
-
-        split_map = {'train': 'train', 'validation': 'test', 'test': 'test'}
-        meta_split = split_map[self.split]
-        meta_path = os.path.join(self.metadata_dir, f'{meta_split}.json')
+        meta_path = os.path.join(self.metadata_dir, 'train.json')
         print(f"  Loading local metadata: {meta_path}")
 
         with open(meta_path, 'r') as f:
             raw = json.load(f)
+
+        if self.split == 'train':
+            raw = raw[:8000]
+        else:
+            raw = raw[8000:10000]
 
         # Flatten & convert to HF-compatible format
         converted = []
@@ -58,15 +60,13 @@ class CLEVRERQADataset(Dataset):
             for q in video_entry.get('questions', []):
                 if q.get('question_type') != self.task_type:
                     continue
-                item = {'video': video_file}  # HF format expects 'video'
+                item = {'video': video_file}
 
                 if self.task_type == 'descriptive':
-                    # HF format: {'conversations': {'value': [question, answer]}}
                     item['conversations'] = {
                         'value': [q['question'], q.get('answer', '')]
                     }
                 else:
-                    # HF format: {'question': ..., 'choices': {'choice': [...], 'answer': [...]}}
                     item['question'] = q['question']
                     choices_raw = q.get('choices', [])
                     item['choices'] = {
