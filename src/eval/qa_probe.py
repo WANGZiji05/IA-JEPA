@@ -158,6 +158,26 @@ def train_probe(jepa_model, train_loader, val_loader, device, epochs=5):
 
 @torch.no_grad()
 def evaluate_probe(jepa_model, probe, val_loader, device):
-    return evaluate_probe_on_features(probe, val_loader, device)
+    """Evaluate probe by extracting features on-the-fly from the JEPA model."""
+    probe.eval()
+    res = {'descriptive': {'correct': 0, 'total': 0}, 'mc_tasks': {'correct': 0, 'total': 0}}
+    for v, l, t, idx, q, choices in val_loader:
+        v = v.to(device)
+        features = jepa_model.context_encoder(
+            jepa_model.patch_embed(v)
+            + (jepa_model.pos_embed if hasattr(jepa_model, 'pos_embed') else 0)
+        )
+        desc_out, mc_out = probe(features, q, choices, device)
+        for i, task in enumerate(t):
+            target = l[i].to(device)
+            if task == 'descriptive':
+                res['descriptive']['correct'] += (desc_out[i].argmax() == target).item()
+                res['descriptive']['total'] += 1
+            else:
+                preds = (torch.sigmoid(mc_out[i]) > 0.5).float()
+                res['mc_tasks']['correct'] += (preds == target).all().float().item()
+                res['mc_tasks']['total'] += 1
+    return {'descriptive_acc': res['descriptive']['correct'] / (res['descriptive']['total'] + 1e-6),
+            'mc_acc': res['mc_tasks']['correct'] / (res['mc_tasks']['total'] + 1e-6)}
 
 class TemporalCausalProbe(MultimodalChoiceProbe): pass
