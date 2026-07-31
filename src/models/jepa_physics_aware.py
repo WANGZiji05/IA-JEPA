@@ -146,20 +146,11 @@ class PhysicsAwareJEPA(VideoJEPA):
     # 3. Physics-aware mask generation
     # ------------------------------------------------------------------
     def get_physics_mask(self, videos):
-        """Generate physics-aware spatiotemporal mask indices.
+        """Pure physics-aware mask: low-importance → context, high-importance → target.
 
-        High-importance tubelets → target (to predict).
-        Low-importance tubelets  → context (visible to encoder).
-
-        Uses deterministic top-K selection (same interface as IA-JEPA variants).
-
-        Returns:
-            context_idx: [B, K_ctx]  flat spatiotemporal indices
-            target_idx:  [B, K_tgt]  flat spatiotemporal indices
-
-            K_tgt = N * (1 - mask_ratio)    high-importance
-            K_ctx = N * mask_ratio          low-importance
-            (matches IA-JEPA Object/Interaction convention)
+        The encoder sees background / low-motion regions and must predict the
+        representations of interaction-heavy patches.  This is the original IA-JEPA
+        masking philosophy — force the model to infer physics from context.
         """
         B, C, T, H, W = videos.shape
         device = videos.device
@@ -174,13 +165,11 @@ class PhysicsAwareJEPA(VideoJEPA):
         # --- physics importance pipeline ---
         vel, acc = self._extract_motion(videos)
         importance = self._compute_importance(vel, acc)          # (B, Td, Hp, Wp)
-
-        # --- deterministic top-K selection ---
         importance_flat = importance.reshape(B, N)               # (B, N)
         _, sorted_idx = torch.sort(importance_flat, dim=1, descending=True)
 
-        target_idx = sorted_idx[:, :K_target]                    # (B, K_tgt)
-        context_idx = sorted_idx[:, K_target:]                   # (B, K_ctx)
+        target_idx = sorted_idx[:, :K_target]                    # high → predict
+        context_idx = sorted_idx[:, K_target:]                   # low → visible
 
         return context_idx, target_idx
 
