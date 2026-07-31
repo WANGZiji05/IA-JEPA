@@ -138,19 +138,19 @@ def main():
     # 1. Initialize Model
     model = get_model(cfg, device)
 
-    # 1b. Staged training: load weights from previous stage
-    if args.staged_from and os.path.exists(args.staged_from):
+    # 1b. Staged training: load weights from previous stage (skip if own checkpoint exists)
+    should_stage = (args.staged_from and os.path.exists(args.staged_from)
+                    and not os.path.exists(os.path.join(cfg["checkpoint_dir"], "last.pth")))
+    if should_stage:
         print(f"=> Staged: loading weights from {args.staged_from}")
         staged_ckpt = torch.load(args.staged_from, map_location=device, weights_only=False)
         sd = staged_ckpt['state_dict'] if 'state_dict' in staged_ckpt else staged_ckpt
         if 'pos_embed' in sd and sd['pos_embed'].shape != model.pos_embed.shape:
-            # interpolate/crop pos_embed if shapes differ
             sd['pos_embed'] = (sd['pos_embed'][:, :model.pos_embed.shape[1], :]
                                if sd['pos_embed'].shape[1] > model.pos_embed.shape[1]
                                else sd['pos_embed'])
         model.load_state_dict(sd, strict=False)
         print("=> Weights loaded. Optimizer and epoch reset to 0.")
-        # Force start_epoch=0 and skip resume
         start_epoch = 0
         global_step = 0
         history = {"train_loss": [], "val_loss": [], "epochs": []}
@@ -172,16 +172,25 @@ def main():
         except Exception as e:
             print(f"=> Could not load existing history: {e}")
 
-    # 3. Auto-resume logic (skip in staged mode)
-    checkpoint_path = ""
-    if not args.staged_from:
-        checkpoint_path = os.path.join(cfg["checkpoint_dir"], "last.pth")
+    # 3. Auto-resume logic (for staged: prefer own checkpoint over staged_from)
+    checkpoint_path = os.path.join(cfg["checkpoint_dir"], "last.pth")
+    if not os.path.exists(checkpoint_path):
+        checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints", "last.pth")
         if not os.path.exists(checkpoint_path):
-            checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints", "last.pth")
-            if not os.path.exists(checkpoint_path):
-                checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints/object_variant", "last.pth")
+            checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints/object_variant", "last.pth")
 
-    if not args.staged_from and (args.resume or True) and os.path.exists(checkpoint_path):
+    # Priority: own checkpoint (resume) > staged_from (fresh load) > scratch
+    if os.path.exists(checkpoint_path):
+        should_stage = False
+        should_resume = True
+    elif args.staged_from and os.path.exists(args.staged_from):
+        should_stage = True
+        should_resume = False
+    else:
+        should_stage = False
+        should_resume = False
+
+    if should_resume:
         print(f"=> Attempting to resume from {checkpoint_path}")
         try:
             checkpoint = torch.load(checkpoint_path, map_location=device)
