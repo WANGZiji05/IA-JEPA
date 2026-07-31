@@ -51,14 +51,12 @@ class CLEVRERCollisionDataset(Dataset):
         return frames
 
     def _load_video(self, video_idx):
-        if video_idx in self._video_cache:
-            return self._video_cache[video_idx]
+        """Load from disk each time — videos too large to cache all at once."""
         path = os.path.join(self.tensor_dir, f"video_{video_idx:05d}.pth")
         if os.path.exists(path):
             v = torch.load(path, map_location='cpu', weights_only=False).float() / 255.0
         else:
             v = torch.zeros(3, self.total_frames, self.frame_size, self.frame_size)
-        self._video_cache[video_idx] = v
         return v
 
     def __len__(self):
