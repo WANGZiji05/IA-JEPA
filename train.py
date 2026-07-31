@@ -19,6 +19,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train Video JEPA Variants")
     parser.add_argument("--config", type=str, default="configs/default.yaml", help="Path to YAML config")
     parser.add_argument("--resume", action="store_true", help="Resume from last checkpoint")
+    parser.add_argument("--staged_from", type=str, default=None, help="Path to checkpoint for staged training (loads weights, resets optimizer/epoch)")
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size")
     parser.add_argument("--accum-steps", type=int, default=None, help="Override gradient accumulation steps")
     return parser.parse_args()
@@ -136,7 +137,24 @@ def main():
 
     # 1. Initialize Model
     model = get_model(cfg, device)
-    
+
+    # 1b. Staged training: load weights from previous stage
+    if args.staged_from and os.path.exists(args.staged_from):
+        print(f"=> Staged: loading weights from {args.staged_from}")
+        staged_ckpt = torch.load(args.staged_from, map_location=device, weights_only=False)
+        sd = staged_ckpt['state_dict'] if 'state_dict' in staged_ckpt else staged_ckpt
+        if 'pos_embed' in sd and sd['pos_embed'].shape != model.pos_embed.shape:
+            # interpolate/crop pos_embed if shapes differ
+            sd['pos_embed'] = (sd['pos_embed'][:, :model.pos_embed.shape[1], :]
+                               if sd['pos_embed'].shape[1] > model.pos_embed.shape[1]
+                               else sd['pos_embed'])
+        model.load_state_dict(sd, strict=False)
+        print("=> Weights loaded. Optimizer and epoch reset to 0.")
+        # Force start_epoch=0 and skip resume
+        start_epoch = 0
+        global_step = 0
+        history = {"train_loss": [], "val_loss": [], "epochs": []}
+
     # 2. Optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     
@@ -154,16 +172,16 @@ def main():
         except Exception as e:
             print(f"=> Could not load existing history: {e}")
 
-    # 3. Auto-resume logic
-    checkpoint_path = os.path.join(cfg["checkpoint_dir"], "last.pth")
-    if not os.path.exists(checkpoint_path):
-        # Fallback 1: Root last.pth
-        checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints", "last.pth")
+    # 3. Auto-resume logic (skip in staged mode)
+    checkpoint_path = ""
+    if not args.staged_from:
+        checkpoint_path = os.path.join(cfg["checkpoint_dir"], "last.pth")
         if not os.path.exists(checkpoint_path):
-             # Fallback 2: object_variant/last.pth (specific for phase 1 stretch)
-             checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints/object_variant", "last.pth")
+            checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints", "last.pth")
+            if not os.path.exists(checkpoint_path):
+                checkpoint_path = os.path.join("/content/drive/MyDrive/object-centric-jepa/checkpoints/object_variant", "last.pth")
 
-    if (args.resume or True) and os.path.exists(checkpoint_path):
+    if not args.staged_from and (args.resume or True) and os.path.exists(checkpoint_path):
         print(f"=> Attempting to resume from {checkpoint_path}")
         try:
             checkpoint = torch.load(checkpoint_path, map_location=device)
