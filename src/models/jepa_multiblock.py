@@ -60,7 +60,7 @@ class MultiBlockJEPA(VideoJEPA):
         block_volume = block_size[0] * block_size[1] * block_size[2]
         npred = max(2, K_target // max(1, block_volume))
 
-        all_targets, all_contexts = [], []
+        all_targets = []
         min_target = K_target
         for _ in range(B):
             mask_3d = torch.ones(Td, Hp, Wp, dtype=torch.int32, device=device)
@@ -73,33 +73,28 @@ class MultiBlockJEPA(VideoJEPA):
 
             flat = mask_3d.reshape(-1)
             target = torch.where(flat == 0)[0]
-            context = torch.where(flat == 1)[0]
 
             if len(target) < K_target:
-                # fill from context to reach K_target
+                # fill from non-target patches to reach K_target
                 n_missing = K_target - len(target)
-                extra = context[torch.randperm(len(context), device=device)[:n_missing]]
+                non_target = torch.where(flat == 1)[0]
+                extra = non_target[torch.randperm(len(non_target), device=device)[:n_missing]]
                 target = torch.cat([target, extra])
-                # remove extra from context
-                ctx_mask = torch.ones(len(context), dtype=torch.bool, device=device)
-                ctx_mask[torch.randperm(len(context), device=device)[:n_missing]] = False
-                context = context[ctx_mask]
 
             if len(target) > K_target:
                 target = target[:K_target]
 
             min_target = min(min_target, len(target))
             all_targets.append(target)
-            all_contexts.append(context)
 
-        # Truncate to uniform size
+        # Truncate to uniform size, derive context as complement
         all_targets = [t[:min_target] for t in all_targets]
         target_idx = torch.stack(all_targets)
 
-        # context = remaining patches, truncated to uniform size
-        min_context = min(len(c) for c in all_contexts)
-        all_contexts = [c[:min_context] for c in all_contexts]
-        context_idx = torch.stack(all_contexts)
+        all_idx = torch.arange(N, device=device).unsqueeze(0).expand(B, -1)
+        ctx_mask = torch.ones(B, N, dtype=torch.bool, device=device)
+        ctx_mask.scatter_(1, target_idx, False)
+        context_idx = all_idx[ctx_mask].reshape(B, N - min_target)
 
         return context_idx, target_idx
 
