@@ -102,8 +102,9 @@ def visualize_one(video_path, cf, model, variant, device, out_path, tubelet_size
 
     # Find which frame indices to show (around collision)
     cf_local = cf_idx - start  # collision frame in the 16-frame clip
-    show_frames = [max(0, cf_local - 2), max(0, cf_local - 1),
-                   cf_local, min(15, cf_local + 1), min(15, cf_local + 2)]
+    # Show frames with gap for visible difference: c-8, c-4, c, c+4, c+8
+    show_frames = [max(0, cf_local - 8), max(0, cf_local - 4),
+                   cf_local, min(15, cf_local + 4), min(15, cf_local + 8)]
 
     fig, axes = plt.subplots(1, 5, figsize=(20, 4.5))
 

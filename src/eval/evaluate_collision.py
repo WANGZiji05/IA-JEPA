@@ -21,6 +21,11 @@ from src.models.jepa_baseline import VideoJEPA
 from src.models.jepa_object import ObjectMaskedJEPA
 from src.models.jepa_interaction import InteractionAwareJEPA
 from src.models.jepa_physics_aware import PhysicsAwareJEPA
+from src.models.jepa_random_tube import RandomTubeJEPA
+from src.models.jepa_multiblock import MultiBlockJEPA
+from src.models.jepa_pa_prob import PAProbabilisticJEPA
+from src.models.jepa_pa_block import PABlockJEPA
+from src.models.jepa_mixed_pa import MixedPhysicsAwareJEPA
 
 
 def collate(batch):
@@ -45,6 +50,14 @@ def evaluate(variant, checkpoint_path, device, batch_size, tensor_dir, ann_dir):
     elif variant == 'mixed_pa':
         from src.models.jepa_mixed_pa import MixedPhysicsAwareJEPA
         model = MixedPhysicsAwareJEPA(**params)
+    elif variant == 'random_tube':
+        model = RandomTubeJEPA(**params)
+    elif variant == 'multiblock':
+        model = MultiBlockJEPA(**params)
+    elif variant == 'pa_prob':
+        model = PAProbabilisticJEPA(**params)
+    elif variant == 'pa_block':
+        model = PABlockJEPA(**params)
     else:
         raise ValueError(f"Unknown variant: {variant}")
 

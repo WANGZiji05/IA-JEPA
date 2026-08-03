@@ -14,6 +14,10 @@ from src.models.jepa_object import ObjectMaskedJEPA
 from src.models.jepa_interaction import InteractionAwareJEPA
 from src.models.jepa_physics_aware import PhysicsAwareJEPA
 from src.models.jepa_mixed_pa import MixedPhysicsAwareJEPA
+from src.models.jepa_random_tube import RandomTubeJEPA
+from src.models.jepa_multiblock import MultiBlockJEPA
+from src.models.jepa_pa_prob import PAProbabilisticJEPA
+from src.models.jepa_pa_block import PABlockJEPA
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Video JEPA Variants")
@@ -89,6 +93,18 @@ def get_model(cfg, device):
     elif variant == "mixed_pa":
         print("Using MixedPhysicsAwareJEPA (PA + Random, Pure SSL)")
         return MixedPhysicsAwareJEPA(**params).to(device)
+    elif variant == "random_tube":
+        print("Using RandomTubeJEPA (Spatial Tube Baseline)")
+        return RandomTubeJEPA(**params).to(device)
+    elif variant == "multiblock":
+        print("Using MultiBlockJEPA (3D Block Baseline, V-JEPA style)")
+        return MultiBlockJEPA(**params).to(device)
+    elif variant == "pa_prob":
+        print("Using PAProbabilisticJEPA (Importance-Weighted Sampling)")
+        return PAProbabilisticJEPA(**params).to(device)
+    elif variant == "pa_block":
+        print("Using PABlockJEPA (PA-Guided Multi-Block)")
+        return PABlockJEPA(**params).to(device)
     else:
         raise ValueError(f"Unknown model variant: {variant}")
 
@@ -109,7 +125,7 @@ def validate(model, dataloader, device, cfg):
             pred_latents, target_latents = model(video, collision_frames=collisions)
         elif cfg["model_variant"] == "physics_aware":
             pred_latents, target_latents = model(video)
-        elif cfg["model_variant"] == "mixed_pa":
+        elif cfg["model_variant"] in ("mixed_pa", "random_tube", "multiblock", "pa_prob", "pa_block"):
             pred_latents, target_latents = model(video)
 
         loss = F.mse_loss(pred_latents, target_latents)
@@ -267,7 +283,7 @@ def main():
                 pred_latents, target_latents = model(video, collision_frames=collisions)
             elif cfg["model_variant"] == "physics_aware":
                 pred_latents, target_latents = model(video)
-            elif cfg["model_variant"] == "mixed_pa":
+            elif cfg["model_variant"] in ("mixed_pa", "random_tube", "multiblock", "pa_prob", "pa_block"):
                 pred_latents, target_latents = model(video)
 
             loss = F.mse_loss(pred_latents, target_latents)

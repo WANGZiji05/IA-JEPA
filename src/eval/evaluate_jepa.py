@@ -8,6 +8,10 @@ from src.models.jepa_object import ObjectMaskedJEPA
 from src.models.jepa_interaction import InteractionAwareJEPA
 from src.models.jepa_physics_aware import PhysicsAwareJEPA
 from src.models.jepa_mixed_pa import MixedPhysicsAwareJEPA
+from src.models.jepa_random_tube import RandomTubeJEPA
+from src.models.jepa_multiblock import MultiBlockJEPA
+from src.models.jepa_pa_prob import PAProbabilisticJEPA
+from src.models.jepa_pa_block import PABlockJEPA
 import argparse
 import os
 
@@ -94,6 +98,10 @@ def evaluate(checkpoint_path, variant='baseline', device='cuda', img_size=96, nu
         elif variant == 'interaction': model = InteractionAwareJEPA(**params)
         elif variant == 'physics_aware': model = PhysicsAwareJEPA(**params)
         elif variant == 'mixed_pa': model = MixedPhysicsAwareJEPA(**params)
+        elif variant == 'random_tube': model = RandomTubeJEPA(**params)
+        elif variant == 'multiblock': model = MultiBlockJEPA(**params)
+        elif variant == 'pa_prob': model = PAProbabilisticJEPA(**params)
+        elif variant == 'pa_block': model = PABlockJEPA(**params)
         else: raise ValueError(f"Unknown variant: {variant}")
         
         if os.path.exists(checkpoint_path):
