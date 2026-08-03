@@ -57,11 +57,9 @@ def get_mask(model, variant, clip, device):
     v = clip.unsqueeze(0).to(device)
 
     if variant == 'baseline':
-        _, N, _, _ = v.shape
-        B = 1
         Td, Hp, Wp = 16 // 2, 96 // 16, 96 // 16
         N = Td * Hp * Wp
-        ids_keep, ids_mask = model.generate_mask(B, N, device)
+        ids_keep, ids_mask = model.generate_mask(1, N, device)
         return ids_keep, ids_mask
 
     if hasattr(model, 'get_physics_mask'):
