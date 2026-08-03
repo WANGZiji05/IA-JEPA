@@ -67,7 +67,9 @@ def get_mask(model, variant, clip, device):
     if hasattr(model, 'get_interaction_mask'):
         return model.get_interaction_mask(v)
     if hasattr(model, 'get_mask_indices'):
-        ctx, tgt = model.get_mask_indices(v)
+        # Object variant needs masks; pass dummy to fall back to motion
+        dummy_masks = torch.zeros(1, 1, 16, 96, 96, device=device)
+        ctx, tgt = model.get_mask_indices(v, masks=dummy_masks)
         Td, Sd = 16 // 2, (96 // 16) ** 2
         ctx_full = torch.cat([ctx + t * Sd for t in range(Td)], dim=1)
         tgt_full = torch.cat([tgt + t * Sd for t in range(Td)], dim=1)
