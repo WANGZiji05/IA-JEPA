@@ -7,6 +7,7 @@ and well-spaced — preventing the whole-object occlusion that kills
 Object/Interaction variants.
 """
 
+import math
 import torch
 from src.models.jepa_physics_aware import PhysicsAwareJEPA
 
@@ -26,20 +27,32 @@ class PABlockJEPA(PhysicsAwareJEPA):
         spatial_importance = importance_3d.mean(dim=1).reshape(B, -1)  # (B, 36)
         spatial_prob = torch.softmax(spatial_importance / 0.5, dim=1)  # (B, 36)
 
-        max_t, max_h, max_w = min(3, Td), min(3, Hp), min(3, Wp)
-        S = Hp * Wp  # 36
+        # Sample block size ONCE per batch (same as multiblock — all blocks same size)
+        seed = getattr(self, '_step_counter', 0)
+        self._step_counter = seed + 1
+        g = torch.Generator(device='cpu')
+        g.manual_seed(seed)
+        # Use multiblock-style continuous sampling for visible block size
+        _rand = torch.rand(1, generator=g).item()
+        bt = max(1, min(Td, int(Td * (0.4 + _rand * 0.4))))  # 3-6
+        _rand = torch.rand(1, generator=g).item()
+        spatial_area = int(Hp * Wp * (0.15 + _rand * 0.25))   # 5-14
+        _rand = torch.rand(1, generator=g).item()
+        ar = 0.5 + _rand * 1.5
+        bh = min(Hp, max(1, int(round(math.sqrt(spatial_area * ar)))))
+        bw = min(Wp, max(1, int(round(math.sqrt(spatial_area / ar)))))
+        block_size = (bt, bh, bw)
+        block_vol = bt * bh * bw
+        npred = max(1, K_target // max(1, block_vol)) + 3  # overshoot
 
         all_targets = []
         for b in range(B):
             mask_3d = torch.zeros(Td, Hp, Wp, dtype=torch.bool, device=device)
-            for _ in range(100):  # overshoot, no scattered fill
-                if mask_3d.sum() >= K_target + 10:  # overshoot margin
-                    break
-                bt = torch.randint(1, max_t + 1, (1,), device=device).item()
-                bh = torch.randint(1, max_h + 1, (1,), device=device).item()
-                bw = torch.randint(1, max_w + 1, (1,), device=device).item()
+            for _ in range(npred):
+                bt, bh, bw = block_size
                 t0 = torch.randint(0, Td - bt + 1, (1,), device=device).item()
 
+                # PA-weighted spatial center
                 spatial_center = torch.multinomial(spatial_prob[b], 1).item()
                 cy, cx = divmod(spatial_center, Wp)
                 h0 = max(0, min(cy - bh // 2, Hp - bh))
@@ -48,8 +61,8 @@ class PABlockJEPA(PhysicsAwareJEPA):
                 mask_3d[t0:t0+bt, h0:h0+bh, w0:w0+bw] = True
 
             flat = mask_3d.reshape(-1)
-            target = torch.where(flat)[0]         # all block-covered positions
-            target = target[:K_target]            # trim, preserves contiguity
+            target = torch.where(flat)[0]
+            target = target[:K_target]
             all_targets.append(target)
 
         target_idx = torch.stack(all_targets)
