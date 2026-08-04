@@ -45,6 +45,8 @@ class MultiBlockJEPA(VideoJEPA):
 
     def generate_blocks(self, B, device):
         """Place random 3D blocks. Return (context_idx, target_idx)."""
+        if not hasattr(self, '_step_counter'):
+            self._step_counter = 0
         Td, Hp, Wp = self._Td, self._Hp, self._Wp
         N = Td * Hp * Wp
         K_target = int(N * (1.0 - self.mask_ratio))  # ~115 (40%)
