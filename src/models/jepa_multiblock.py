@@ -44,26 +44,24 @@ class MultiBlockJEPA(VideoJEPA):
         return (t, h, w)
 
     def generate_blocks(self, B, device):
-        """Place random 3D blocks. Return (context_idx, target_idx)."""
+        """Place random 3D blocks (always overshoot K_target, then trim)."""
         if not hasattr(self, '_step_counter'):
             self._step_counter = 0
         Td, Hp, Wp = self._Td, self._Hp, self._Wp
         N = Td * Hp * Wp
-        K_target = int(N * (1.0 - self.mask_ratio))  # ~115 (40%)
+        K_target = int(N * (1.0 - self.mask_ratio))
 
-        # Sample block size ONCE per batch (V-JEPA style — all samples share same block dims)
         seed = self._step_counter
         self._step_counter += 1
         g = torch.Generator(device='cpu')
         g.manual_seed(seed)
         block_size = self._sample_block_size(g)
 
-        # Number of blocks to approximately hit the target ratio, with overshoot
+        # Place MORE blocks than needed — always overshoot, then trim.  No scattered fills.
         block_volume = block_size[0] * block_size[1] * block_size[2]
-        npred = max(2, K_target // max(1, block_volume))
+        npred = max(1, K_target // max(1, block_volume)) + 3  # +3 guarantees overshoot
 
         all_targets = []
-        min_target = K_target
         for _ in range(B):
             mask_3d = torch.ones(Td, Hp, Wp, dtype=torch.int32, device=device)
             for _ in range(npred):
@@ -74,31 +72,16 @@ class MultiBlockJEPA(VideoJEPA):
                 mask_3d[t0:t0+t, h0:h0+h, w0:w0+w] = 0
 
             flat = mask_3d.reshape(-1)
-            target = torch.where(flat == 0)[0]
-
-            if len(target) < K_target:
-                # fill from non-target patches to reach K_target
-                n_missing = K_target - len(target)
-                non_target = torch.where(flat == 1)[0]
-                extra = non_target[torch.randperm(len(non_target), device=device)[:n_missing]]
-                target = torch.cat([target, extra])
-
-            if len(target) > K_target:
-                target = target[:K_target]
-
-            min_target = min(min_target, len(target))
+            target = torch.where(flat == 0)[0]  # all block-covered positions
+            target = target[:K_target]           # trim to exactly K_target (keeps contiguity)
             all_targets.append(target)
 
-        # Truncate to uniform size, derive context as complement
-        all_targets = [t[:min_target] for t in all_targets]
         target_idx = torch.stack(all_targets)
 
         all_idx = torch.arange(N, device=device).unsqueeze(0).expand(B, -1)
         ctx_mask = torch.ones(B, N, dtype=torch.bool, device=device)
         ctx_mask.scatter_(1, target_idx, False)
-        context_idx = all_idx[ctx_mask].reshape(B, N - min_target)
-
-        return context_idx, target_idx
+        context_idx = all_idx[ctx_mask].reshape(B, N - K_target)
 
         return context_idx, target_idx
 

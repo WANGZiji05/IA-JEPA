@@ -32,16 +32,14 @@ class PABlockJEPA(PhysicsAwareJEPA):
         all_targets = []
         for b in range(B):
             mask_3d = torch.zeros(Td, Hp, Wp, dtype=torch.bool, device=device)
-            for _ in range(50):
-                if mask_3d.sum() >= K_target:
+            for _ in range(100):  # overshoot, no scattered fill
+                if mask_3d.sum() >= K_target + 10:  # overshoot margin
                     break
-                # Block sizes: random (as in multi-block)
                 bt = torch.randint(1, max_t + 1, (1,), device=device).item()
                 bh = torch.randint(1, max_h + 1, (1,), device=device).item()
                 bw = torch.randint(1, max_w + 1, (1,), device=device).item()
                 t0 = torch.randint(0, Td - bt + 1, (1,), device=device).item()
 
-                # Spatial center: weighted by PA importance
                 spatial_center = torch.multinomial(spatial_prob[b], 1).item()
                 cy, cx = divmod(spatial_center, Wp)
                 h0 = max(0, min(cy - bh // 2, Hp - bh))
@@ -49,9 +47,10 @@ class PABlockJEPA(PhysicsAwareJEPA):
 
                 mask_3d[t0:t0+bt, h0:h0+bh, w0:w0+bw] = True
 
-            flat = mask_3d.reshape(-1).int()
-            target_positions = torch.topk(flat, K_target).indices
-            all_targets.append(target_positions)
+            flat = mask_3d.reshape(-1)
+            target = torch.where(flat)[0]         # all block-covered positions
+            target = target[:K_target]            # trim, preserves contiguity
+            all_targets.append(target)
 
         target_idx = torch.stack(all_targets)
         all_idx = torch.arange(N, device=device).unsqueeze(0).expand(B, -1)
